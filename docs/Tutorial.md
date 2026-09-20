@@ -9,6 +9,7 @@ capturing frames, converting them to other formats and tuning the sensor.
 - [4. Assigning pins](#4-assigning-pins)
 - [5. Working with frames](#5-working-with-frames)
 - [6. Format conversion](#6-format-conversion)
+  - [Software conversion (TinyJPEG)](#software-conversion-tinyjpeg)
 - [7. Tuning the sensor](#7-tuning-the-sensor)
 - [8. Managing the camera lifecycle](#8-managing-the-camera-lifecycle)
 - [9. Logging](#9-logging)
@@ -27,6 +28,8 @@ need:
 #include "TinyCameraPins.h"     // setPinsAiThinker() and friends (ESP32 boards)
 #include "TinyCameraConvert.h"  // toJpg(), toBmp(), toRgb888(), toRgb565()
 #include "TinyCameraLogger.h"   // optional: TinyCameraLogger (see section 9)
+// optional: TinyCameraConvertSoftware.h - toJpgSoftware() and friends,
+// needs the TinyJPEG library installed too (see section 6)
 ```
 
 Everything lives in the `tiny_camera` namespace. The examples use
@@ -36,9 +39,18 @@ The underlying driver comes from your board's core:
 
 - **ESP32** (and variants): the `esp32-camera` driver bundled with the ESP32
   Arduino core. Nothing extra to install.
-- **RP2040**: the `Camera` library bundled with the
-  [arduino-pico](https://github.com/earlephilhower/arduino-pico) core, which
-  mirrors the ESP32 camera API.
+- **RP2040**: [PicoCamera](https://github.com/umeiko/PicoCamera), bundled
+  with the [arduino-pico](https://github.com/earlephilhower/arduino-pico)
+  core - nothing extra to install, but its API (`pico_camera_*()`) isn't
+  quite esp32-camera's own. `TinyCameraRP2040.h` (included automatically
+  by `TinyCamera.h`) bridges the two, the same way `TinyCameraSTM32.h`
+  does for STM32; unlike that backend, this bridge has only been
+  compiled, not run on real RP2040 hardware. PicoCamera has no hardware
+  JPEG codec, so `TinyCameraConvert.h`'s JPEG-related functions only
+  pass through frames already captured as JPEG on this platform (same
+  limitation as STM32) - see
+  [Software conversion (TinyJPEG)](#software-conversion-tinyjpeg) for
+  real JPEG encode/decode.
 - **STM32** (DCMI-capable parts): implemented natively in this library on
   top of the STM32Cube HAL - nothing extra to install, but there's more to
   know than a one-line summary here; see [section 10](#10-stm32-dcmi).
@@ -365,6 +377,63 @@ Notes and limits:
 
 The `ConvertToBmp` example shows the full flow.
 
+### Software conversion (TinyJPEG)
+
+`TinyCameraConvert.h`'s conversions wrap `img_converters.h`, a hardware/vendor
+JPEG codec only ESP32 (`esp32-camera`) actually has - neither RP2040
+(PicoCamera) nor STM32 provides one, so on those two platforms
+`TinyCameraConvert.h`'s JPEG-related functions only pass through frames
+already captured as JPEG (see [section 10](#10-stm32-dcmi) for STM32's
+specifics; RP2040's are the same). `TinyCameraConvertSoftware.h` is a
+separate, opt-in header providing the same four conversions as pure software,
+backed by the [TinyJPEG](https://github.com/pschatzmann/TinyJPEG) library
+(`TinyJPEGEncoder`/`TinyJPEGDecoder` - install it alongside TinyCamera; this
+header does not compile without it, on purpose - see below). Unlike
+`TinyCameraConvert.h`, these work identically on every platform:
+
+```cpp
+#include "TinyCameraConvertSoftware.h"
+
+TinyCameraBuffer jpg = toJpgSoftware(frame, 80);  // RGB565/RGB888/GRAYSCALE -> JPEG, quality 1-100
+TinyCameraBuffer bmp = toBmpSoftware(frame);      // JPEG -> BMP
+
+std::vector<uint8_t> rgb565(frame.width() * frame.height() * 2);
+toRgb565Software(frame, rgb565.data());           // JPEG -> RGB565
+
+std::vector<uint8_t> rgb888(frame.width() * frame.height() * 3);
+toRgb888Software(frame, rgb888.data());           // JPEG -> RGB888
+```
+
+This is what makes JPEG usable on RP2040/STM32 at all: `toJpgSoftware()`
+encodes an `RGB565` capture to JPEG, and `toRgb565Software()`/
+`toRgb888Software()`/`toBmpSoftware()` decode a JPEG frame back to raw
+pixels or BMP - none of which `TinyCameraConvert.h` can do on either
+platform (see
+[Coverage and limits vs. ESP32/RP2040](#coverage-and-limits-vs-esp32rp2040)
+for STM32's specifics; RP2040's are the same, minus custom-size scaling).
+On ESP32 these functions still work, but prefer `TinyCameraConvert.h`'s
+hardware-backed versions there: TinyJPEG has no dynamic allocation and a
+small fixed workspace, which costs more CPU time than `esp32-camera`'s
+own codec.
+
+Two things worth knowing before reaching for these:
+
+- **The TinyJPEG library is a hard dependency of this header, not an
+  optional one.** Including `TinyCameraConvertSoftware.h` without it
+  installed fails to compile with a `TinyJPEGEncoder.h`/`TinyJPEGDecoder.h`
+  "No such file or directory" error - by design, so a missing dependency is a
+  clear build error rather than a silently missing feature. Only include
+  this header from sketches that actually use it.
+- The decode-side functions (`toRgb565Software()`/`toRgb888Software()`/
+  `toBmpSoftware()`) require a `TinyCameraFrame` whose `format()` is already
+  `PIXFORMAT_JPEG` - capture with `config.pixel_format = PIXFORMAT_JPEG`
+  first (not supported on STM32; see [section 10](#10-stm32-dcmi)).
+  `toJpgSoftware()` is the reverse: it rejects a frame that's already JPEG.
+
+The `ConvertSoftware` example captures RGB565 and encodes it to JPEG in
+software - the RP2040/STM32-relevant case, though the example itself is
+platform-generic.
+
 ## 7. Tuning the sensor
 
 `camera.sensor()` gives access to the underlying `sensor_t` for brightness,
@@ -612,9 +681,13 @@ sections.
 - `fb_count` is always 1 (single buffering) and `grab_mode` is ignored.
 - In `TinyCameraConvert.h`, `toJpg()` only accepts frames already captured
   as JPEG (it copies the data; `quality` is ignored), and `toBmp()` /
-  `toRgb888()` / `toRgb565()` only accept `PIXFORMAT_RGB565` frames - there
-  is no software JPEG encoder/decoder bundled. Capture directly in the
-  format you need instead of converting after the fact.
+  `toRgb888()` / `toRgb565()` only accept `PIXFORMAT_RGB565` frames - this
+  backend has no hardware JPEG codec, so none of these can produce or
+  consume JPEG. For that, capture as `PIXFORMAT_RGB565` and use
+  `TinyCameraConvertSoftware.h`'s `toJpgSoftware()` instead (see
+  [Software conversion (TinyJPEG)](#software-conversion-tinyjpeg)) - a
+  software JPEG encoder, so slower than a hardware path, but the only way
+  to get JPEG off this backend at all.
 - The DCMI capture engine uses `DMA1_Stream0` (matching WeAct's reference
   firmware); if your sketch needs that stream for something else, adjust it
   in `TinyCameraSTM32.h`.

@@ -3,16 +3,16 @@
  * TinyCamera - a tiny, header-only C++ wrapper around the ESP32 (esp32-camera),
  * RP2040 and STM32 (DCMI + OV7725, experimental) camera APIs.
  *
- * All three platforms expose (or are given, on STM32 via
- * TinyCameraSTM32.h) a compatible C API (camera_config_t, camera_fb_t,
- * esp_camera_init/deinit/fb_get/fb_return), so this single header works
- * unmodified on any of them.
+ * All three platforms expose (or are given - RP2040 via
+ * TinyCameraRP2040.h, STM32 via TinyCameraSTM32.h) a compatible C API
+ * (camera_config_t, camera_fb_t, esp_camera_init/deinit/fb_get/fb_return),
+ * so this single header works unmodified on any of them.
  */
 
 #if defined(ESP32)
 #include "esp_camera.h"
 #elif defined(ARDUINO_ARCH_RP2040) || defined(PICO_RP2040) || defined(TARGET_RP2040)
-#include <Camera.h>
+#include "TinyCameraRP2040.h"
 #elif defined(ARDUINO_ARCH_STM32)
 #include "TinyCameraSTM32.h"
 #else

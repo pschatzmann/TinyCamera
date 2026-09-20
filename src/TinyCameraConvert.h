@@ -2,13 +2,16 @@
 /**
  * Pixel format conversion helpers for TinyCamera.
  *
- * On ESP32 and RP2040 these wrap the img_converters.h functions provided
- * by the esp32-camera driver resp. the arduino-pico Camera library (which
- * mirrors the ESP32 conversion API for compatibility).
+ * On ESP32 these wrap the img_converters.h functions provided by the
+ * esp32-camera driver.
  *
- * On STM32 there is no img_converters.h equivalent, so this header
- * provides software implementations instead, with a narrower feature set
- * (see the function comments below for exact coverage).
+ * On RP2040 and STM32 there is no img_converters.h equivalent - PicoCamera
+ * (arduino-pico's bundled camera library; see TinyCameraRP2040.h) has no
+ * hardware/vendor JPEG codec, same as STM32's DCMI backend - so this
+ * header provides software implementations instead, with a narrower
+ * feature set (see the function comments below for exact coverage). For
+ * full JPEG encode/decode on either platform, see
+ * TinyCameraConvertSoftware.h instead (backed by the TinyJPEG library).
  */
 
 #include <string.h>
@@ -17,8 +20,6 @@
 
 #if defined(ESP32)
 #include "img_converters.h"
-#elif defined(ARDUINO_ARCH_RP2040) || defined(PICO_RP2040) || defined(TARGET_RP2040)
-#include <img_converters.h>
 #endif
 
 namespace tiny_camera {
@@ -116,21 +117,24 @@ inline bool scaleRgb565(const TinyCameraFrame &frame, uint8_t *outBuf,
   return true;
 }
 
-#if defined(ARDUINO_ARCH_STM32)
+#if defined(ARDUINO_ARCH_STM32) || defined(ARDUINO_ARCH_RP2040) || \
+    defined(PICO_RP2040) || defined(TARGET_RP2040)
 
-/// Converts a captured frame to a JPEG buffer. STM32 has no software JPEG
-/// encoder here: this only supports frames that are already JPEG (i.e.
-/// captured with pixel_format = PIXFORMAT_JPEG, encoded by the sensor's own
-/// hardware encoder), in which case it just copies the existing data;
-/// `quality` is ignored. Returns an invalid buffer for any other format -
-/// prefer capturing directly as PIXFORMAT_JPEG over converting after the
-/// fact.
+/// Converts a captured frame to a JPEG buffer. Neither STM32 nor RP2040
+/// (PicoCamera) has a hardware/vendor JPEG encoder here, so this only
+/// supports frames that are already JPEG (i.e. captured with
+/// pixel_format = PIXFORMAT_JPEG, encoded by the sensor's own hardware
+/// encoder), in which case it just copies the existing data; `quality` is
+/// ignored. Returns an invalid buffer for any other format - prefer
+/// capturing directly as PIXFORMAT_JPEG over converting after the fact,
+/// or see TinyCameraConvertSoftware.h's toJpgSoftware() for a real
+/// (software) encoder.
 inline TinyCameraBuffer toJpg(const TinyCameraFrame &frame, uint8_t quality = 12) {
   (void)quality;
   if (!frame || frame.format() != PIXFORMAT_JPEG) {
     TinyCameraLogger.error(
-        "toJpg(): frame is invalid or not already JPEG (STM32 has no "
-        "software JPEG encoder)");
+        "toJpg(): frame is invalid or not already JPEG (no software JPEG "
+        "encoder here - see TinyCameraConvertSoftware.h's toJpgSoftware())");
     return TinyCameraBuffer();
   }
   uint8_t *out = (uint8_t *)malloc(frame.size());
@@ -146,12 +150,13 @@ inline TinyCameraBuffer toJpg(const TinyCameraFrame &frame, uint8_t quality = 12
 /// Converts an RGB565 frame to a BMP buffer (24-bit RGB888 pixel data,
 /// bottom-up rows, as required by the BMP format). JPEG frames are not
 /// supported (no software JPEG decoder is included) - capture as
-/// PIXFORMAT_RGB565 to use this.
+/// PIXFORMAT_RGB565 to use this, or see TinyCameraConvertSoftware.h's
+/// toBmpSoftware() for JPEG input.
 inline TinyCameraBuffer toBmp(const TinyCameraFrame &frame) {
   if (!frame || frame.format() != PIXFORMAT_RGB565) {
     TinyCameraLogger.error(
         "toBmp(): frame is invalid or not RGB565 (no software JPEG decoder "
-        "on STM32)");
+        "here - see TinyCameraConvertSoftware.h's toBmpSoftware())");
     return TinyCameraBuffer();
   }
 
@@ -225,20 +230,22 @@ inline bool toRgb888(const TinyCameraFrame &frame, uint8_t *outBuf) {
 }
 
 /// Copies an RGB565 frame into a caller-provided buffer of at least
-/// width() * height() * 2 bytes. Unlike ESP32/RP2040, this does not decode
-/// JPEG - it only supports frames already captured as PIXFORMAT_RGB565.
+/// width() * height() * 2 bytes. Unlike ESP32, this does not decode
+/// JPEG - it only supports frames already captured as PIXFORMAT_RGB565
+/// (see TinyCameraConvertSoftware.h's toRgb565Software() for JPEG input).
 inline bool toRgb565(const TinyCameraFrame &frame, uint8_t *outBuf) {
   if (!frame || outBuf == nullptr || frame.format() != PIXFORMAT_RGB565) {
     TinyCameraLogger.error(
         "toRgb565(): frame is invalid, outBuf is null, or frame is not "
-        "already RGB565 (no software JPEG decoder on STM32)");
+        "already RGB565 (no software JPEG decoder here - see "
+        "TinyCameraConvertSoftware.h's toRgb565Software())");
     return false;
   }
   memcpy(outBuf, frame.data(), frame.size());
   return true;
 }
 
-#else  // ESP32 / RP2040
+#else  // ESP32
 
 /// Converts any captured frame to a JPEG buffer at the given quality
 /// (0-63, lower is higher quality). If the frame is already JPEG, prefer
@@ -300,6 +307,6 @@ inline bool toRgb565(const TinyCameraFrame &frame, uint8_t *outBuf) {
   return ok;
 }
 
-#endif  // ARDUINO_ARCH_STM32
+#endif  // ARDUINO_ARCH_STM32 || RP2040
 
 }  // namespace tiny_camera
