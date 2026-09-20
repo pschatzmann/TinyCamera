@@ -24,16 +24,6 @@ so the same header works unmodified on any of them.
   scaling (sensor-dependent), with a portable software nearest-neighbor
   fallback (`scaleRgb565()`) that works on every platform.
 
-## Documentation
-
-- [Tutorial](docs/Tutorial.md) for installation, configuration, capturing
-frames, format conversion and sensor tuning
-- [Performance](docs/Performance.md)
-for measured capture throughput and how to benchmark your own hardware
-- [Supported Boards](docs/SupportedBoards.md) for every pin preset and the
-exact pins it assigns. 
-- Runnable sketches are in [examples/](examples/).
-
 ## Supported platforms
 
 - **ESP32** (and variants): requires the `esp32-camera` driver bundled with
@@ -50,3 +40,26 @@ exact pins it assigns.
   See the [STM32 section](docs/Tutorial.md#10-stm32-dcmi) of the tutorial
   before using it, especially its notes on camera-connector pin
   compatibility between boards.
+
+## Documentation
+
+- [Tutorial](docs/Tutorial.md) for installation, configuration, capturing
+frames, format conversion and sensor tuning
+- [Performance](docs/Performance.md)
+for measured capture throughput and how to benchmark your own hardware
+- [Supported Boards](docs/SupportedBoards.md) for every pin preset and the
+exact pins it assigns. 
+- Runnable sketches are in [examples/](examples/).
+
+## Installation in Arduino
+
+You can download the library as zip and call include Library -> zip library. Or you can git clone this project into the Arduino libraries folder e.g. with
+
+```
+cd  ~/Documents/Arduino/libraries
+git clone https://github.com/pschatzmann/TinyCamera.git
+```
+
+I recommend to use git because you can easily update to the latest version just by executing the ```git pull``` command in the project folder.
+
+
