@@ -93,7 +93,7 @@ class OV7725Driver : public SccbSensorDriver8Bit {
   // TinyCameraSTM32.h's example sketches use to fit a smaller display
   // (which keeps full resolution over a narrower FOV instead). This
   // arbitrary-size path was verified on real hardware at 160x80 (see
-  // examples/STM32DcmiScaledCapture): the sensor accepted the request,
+  // examples/ScaledCapture): the sensor accepted the request,
   // reported no capture errors over a sustained run, and the resulting
   // image showed the sensor's whole field of view scaled down, not a
   // center crop.

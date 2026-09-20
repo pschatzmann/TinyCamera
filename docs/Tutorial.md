@@ -142,7 +142,8 @@ The aliases `PixelFormat` and `FrameSize` are provided for
 
 `frame_size` only accepts the named `FRAMESIZE_*` presets. For an exact
 custom resolution instead - e.g. to match a small display exactly, the
-way `STM32DcmiScaledCapture` does on STM32 - call
+way `ScaledCapture` does (with a software-scaling fallback for platforms/
+sensors that don't support it) - call
 `camera.setCustomFrameSize(width, height)` **after** `begin()`. It asks
 the sensor's own DSP to scale its current field of view down to that
 exact size in hardware (not a software crop), and the next
@@ -545,20 +546,25 @@ setPinsWeActStm32H750(config);  // WeAct STM32H750; fill in pin_* yourself other
 camera.begin(config);
 ```
 
-Two full example sketches are provided for a WeAct STM32H750, both live-
-previewing the captured frames on that board's bundled 160x80 LCD via
+A full example sketch is provided for a WeAct STM32H750, live-previewing
+the captured frames on that board's bundled 160x80 LCD via
 [TinyGPU](https://github.com/pschatzmann/TinyGPU) (install it alongside
-TinyCamera; both examples need it to compile):
+TinyCamera; it needs it to compile):
 
 - **`STM32DcmiCapture`**: captures a fixed `FRAMESIZE_QVGA` (320x240) RGB565
   frame and crops a centered 160x80 window out of it in software to fit
   the LCD - only shows the cropped center of the field of view, not the
   whole scene.
-- **`STM32DcmiScaledCapture`**: requests 160x80 directly via
-  `camera_config_t::custom_width`/`custom_height` (see below) instead of
-  `frame_size`, so OV7725's own DSP scales its whole captured field of
-  view down to exactly that size in hardware - no software crop, and the
-  full scene ends up on the LCD.
+
+For requesting an exact output size directly instead of cropping, see the
+platform-generic **`ScaledCapture`** example (no display/TinyGPU
+dependency): it requests `custom_width`/`custom_height` (see below) via
+`camera.setCustomFrameSize()`, so the sensor's own DSP scales its whole
+captured field of view down to exactly that size in hardware where
+supported (e.g. STM32's OV7725) - no software crop, and the full scene
+ends up in the frame - falling back to software scaling
+(`scaleRgb565()` in `TinyCameraConvert.h`) on platforms/sensors where
+hardware scaling isn't available (e.g. RP2040).
 
 ```cpp
 #include "TinyCamera.h"
@@ -576,7 +582,8 @@ config.pixel_format = PIXFORMAT_RGB565;
 config.frame_size = FRAMESIZE_QVGA;
 
 // ...or an arbitrary size the sensor scales its full field of view down
-// to in hardware (see STM32DcmiScaledCapture):
+// to in hardware, with a software fallback where unsupported (see
+// ScaledCapture):
 // config.custom_width = 160;
 // config.custom_height = 80;
 
@@ -623,8 +630,10 @@ sections.
 > compiled, flashed and run end-to-end on an actual WeAct STM32H750 board
 > with an OV7725 camera module (SCCB address 0x21, product ID 0x77)
 > plugged into its onboard DCMI connector, capturing and displaying live
-> RGB565 frames on that board's bundled LCD via both `STM32DcmiCapture`
-> and `STM32DcmiScaledCapture` - sustained runs showed zero capture
+> RGB565 frames on that board's bundled LCD via `STM32DcmiCapture`, and
+> the same `setCustomFrameSize()`/`custom_width`/`custom_height` hardware
+> scaling path now shipped as the platform-generic `ScaledCapture`
+> example - sustained runs showed zero capture
 > timeouts, zero corrupt/missing pixels, and a clean, correctly-updating
 > live image. Getting there took several rounds of real-hardware
 > debugging beyond what a source-level port could catch: the DCMI/DMA/
