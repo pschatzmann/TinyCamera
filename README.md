@@ -26,10 +26,13 @@ so the same header works unmodified on any of them.
 
 ## Documentation
 
-See the [Tutorial](docs/Tutorial.md) for installation, configuration, capturing
-frames, format conversion and sensor tuning, and [Performance](docs/Performance.md)
-for measured capture throughput and how to benchmark your own hardware.
-Runnable sketches are in [examples/](examples/).
+- [Tutorial](docs/Tutorial.md) for installation, configuration, capturing
+frames, format conversion and sensor tuning
+- [Performance](docs/Performance.md)
+for measured capture throughput and how to benchmark your own hardware
+- [Supported Boards](docs/SupportedBoards.md) for every pin preset and the
+exact pins it assigns. 
+- Runnable sketches are in [examples/](examples/).
 
 ## Supported platforms
 
