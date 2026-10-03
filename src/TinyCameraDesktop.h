@@ -1,7 +1,7 @@
 #pragma once
 /**
- * Desktop (Linux/macOS) compatibility layer for TinyCamera, built via the
- * CMake build in this repository's root CMakeLists.txt. Plain C++/POSIX:
+ * Desktop (Linux/macOS/Windows) compatibility layer for TinyCamera, built
+ * via the CMake build in this repository's root CMakeLists.txt. Plain C++:
  * it needs no Arduino core, so it works in an ordinary C++ program as
  * well as in Arduino sketches run with the Arduino Emulator
  * (https://github.com/pschatzmann/Arduino-Emulator).
@@ -18,13 +18,20 @@
  *    bars, a gray ramp and a moving white square). Works everywhere and
  *    needs no hardware - frame contents are deterministic, which makes it
  *    suitable for automated tests.
- *  - CAMERA_SOURCE_V4L2 (Linux only): a real webcam via Video4Linux2. The
- *    device is camera_config_t::device, else the TINY_CAMERA_DEVICE
- *    environment variable, else /dev/video0. The webcam must support the
- *    YUYV (YUV 4:2:2) capture format, which practically every UVC webcam
- *    does.
- *  - CAMERA_SOURCE_AUTO (default): V4L2 if a webcam can be opened, else
- *    the test pattern.
+ *  - CAMERA_SOURCE_SDL (every platform, needs SDL3 - enabled by defining
+ *    TINY_CAMERA_USE_SDL3 and linking SDL3, which the CMake build does by
+ *    default): a real webcam via SDL3's camera API, which uses each OS's
+ *    native camera system (V4L2 on Linux, AVFoundation on macOS, Media
+ *    Foundation on Windows). camera_config_t::device (else the
+ *    TINY_CAMERA_DEVICE environment variable) selects the camera by index
+ *    ("0", "1", ...) or by part of its name; default: the first camera.
+ *  - CAMERA_SOURCE_V4L2 (Linux only, no dependencies): a real webcam via
+ *    Video4Linux2 directly. The device is camera_config_t::device, else
+ *    the TINY_CAMERA_DEVICE environment variable, else /dev/video0. The
+ *    webcam must support the YUYV (YUV 4:2:2) capture format, which
+ *    practically every UVC webcam does.
+ *  - CAMERA_SOURCE_AUTO (default): the first of SDL, V4L2 that is
+ *    available and can open a webcam, else the test pattern.
  *
  * Coverage / limitations:
  *  - Pixel formats: RGB565 (native-endian uint16_t per pixel, as the
@@ -47,11 +54,17 @@
  *    and ignored.
  */
 
+#include <ctype.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
+
+#if defined(_WIN32)
+#include <winsock2.h>  // struct timeval
+#else
+#include <sys/time.h>
+#endif
 
 #include <chrono>
 #include <thread>
@@ -66,6 +79,10 @@
 #include <sys/select.h>
 #include <unistd.h>
 #define TINY_CAMERA_DESKTOP_HAS_V4L2 1
+#endif
+
+#if defined(TINY_CAMERA_USE_SDL3)
+#include <SDL3/SDL.h>
 #endif
 
 #if defined(__has_include)
@@ -145,6 +162,7 @@ enum camera_source_t {
   CAMERA_SOURCE_AUTO,
   CAMERA_SOURCE_TEST_PATTERN,
   CAMERA_SOURCE_V4L2,
+  CAMERA_SOURCE_SDL,
 };
 
 typedef int esp_err_t;
@@ -169,7 +187,9 @@ struct camera_config_t {
 
   // Desktop-only fields.
   camera_source_t source = CAMERA_SOURCE_AUTO;
-  // V4L2 device path; nullptr: $TINY_CAMERA_DEVICE, else /dev/video0.
+  // Which webcam: for SDL a camera index ("0", "1", ...) or part of its
+  // name, for V4L2 a device path. nullptr: $TINY_CAMERA_DEVICE, else the
+  // first camera (SDL) or /dev/video0 (V4L2).
   const char *device = nullptr;
   // Caps the test pattern's frame rate, emulating a real sensor's
   // (0: unthrottled, e.g. for tests). A webcam paces itself.
@@ -401,6 +421,147 @@ class V4l2Source {
 
 #endif  // TINY_CAMERA_DESKTOP_HAS_V4L2
 
+#if defined(TINY_CAMERA_USE_SDL3)
+
+/**
+ * Webcam capture via SDL3's camera API - works on every platform SDL
+ * supports. SDL converts (and if needed scales) the camera's native
+ * frames to RGB24 at the requested size.
+ */
+class SdlSource {
+ public:
+  ~SdlSource() { close(); }
+
+  /// Opens the camera selected by `device` (index or part of the name;
+  /// nullptr: the first one) delivering width x height RGB24 frames.
+  bool open(const char *device, int width, int height) {
+    if (!SDL_InitSubSystem(SDL_INIT_CAMERA)) {
+      TinyCameraLogger.info("SDL camera init failed: %s", SDL_GetError());
+      return false;
+    }
+    initialized_ = true;
+
+    int count = 0;
+    SDL_CameraID *ids = SDL_GetCameras(&count);
+    SDL_CameraID id = 0;
+    for (int i = 0; ids != nullptr && i < count && id == 0; i++) {
+      const char *name = SDL_GetCameraName(ids[i]);
+      if (device == nullptr || *device == 0) {
+        id = ids[i];
+      } else if (isNumber(device)) {
+        if (atoi(device) == i) id = ids[i];
+      } else if (name != nullptr && strstr(name, device) != nullptr) {
+        id = ids[i];
+      }
+    }
+    SDL_free(ids);
+    if (id == 0) {
+      TinyCameraLogger.info("SDL: no camera found%s%s",
+                             device ? " matching " : "", device ? device : "");
+      close();
+      return false;
+    }
+
+    SDL_CameraSpec spec = {};
+    spec.format = SDL_PIXELFORMAT_RGB24;
+    spec.colorspace = SDL_COLORSPACE_SRGB;
+    spec.width = width;
+    spec.height = height;
+    camera_ = SDL_OpenCamera(id, &spec);
+    if (camera_ == nullptr) {
+      TinyCameraLogger.error("SDL: cannot open camera: %s", SDL_GetError());
+      close();
+      return false;
+    }
+    TinyCameraLogger.info("SDL: opened camera '%s' (%s driver) at %dx%d",
+                           SDL_GetCameraName(id),
+                           SDL_GetCurrentCameraDriver(), width, height);
+    return true;
+  }
+
+  void close() {
+    if (camera_ != nullptr) {
+      SDL_CloseCamera(camera_);
+      camera_ = nullptr;
+    }
+    if (initialized_) {
+      SDL_QuitSubSystem(SDL_INIT_CAMERA);
+      initialized_ = false;
+    }
+  }
+
+  /// Waits for the next frame and copies it to `rgb` as RGB888, scaling
+  /// (nearest neighbor) to outW x outH if SDL delivered another size.
+  bool read(uint8_t *rgb, int outW, int outH) {
+    using namespace std::chrono;
+    auto start = steady_clock::now();
+    bool loggedWait = false;
+    SDL_Surface *frame = nullptr;
+    while (frame == nullptr) {
+      SDL_PumpEvents();
+      int state = (int)SDL_GetCameraPermissionState(camera_);
+      if (state < 0) {
+        TinyCameraLogger.error("SDL: camera access was denied");
+        return false;
+      }
+      if (state > 0) frame = SDL_AcquireCameraFrame(camera_, nullptr);
+      if (frame != nullptr) break;
+
+      // Waiting for the user to grant camera permission (e.g. macOS) can
+      // take a while; once granted, frames should arrive quickly.
+      auto timeout = state == 0 ? seconds(60) : seconds(2);
+      if (state == 0 && !loggedWait) {
+        TinyCameraLogger.info("SDL: waiting for camera permission");
+        loggedWait = true;
+      }
+      if (steady_clock::now() - start > timeout) {
+        TinyCameraLogger.warn("SDL: timeout waiting for a frame");
+        return false;
+      }
+      std::this_thread::sleep_for(milliseconds(1));
+    }
+
+    SDL_Surface *src = frame;
+    if (frame->format != SDL_PIXELFORMAT_RGB24) {
+      src = SDL_ConvertSurface(frame, SDL_PIXELFORMAT_RGB24);
+    }
+    bool ok = src != nullptr;
+    if (ok) {
+      const uint8_t *pixels = (const uint8_t *)src->pixels;
+      for (int y = 0; y < outH; y++) {
+        const uint8_t *row = pixels + (size_t)(y * src->h / outH) * src->pitch;
+        uint8_t *dst = rgb + (size_t)y * outW * 3;
+        if (src->w == outW) {
+          memcpy(dst, row, (size_t)outW * 3);
+        } else {
+          for (int x = 0; x < outW; x++) {
+            memcpy(dst + x * 3, row + (size_t)(x * src->w / outW) * 3, 3);
+          }
+        }
+      }
+    } else {
+      TinyCameraLogger.warn("SDL: frame conversion failed: %s",
+                             SDL_GetError());
+    }
+    if (src != frame) SDL_DestroySurface(src);
+    SDL_ReleaseCameraFrame(camera_, frame);
+    return ok;
+  }
+
+ private:
+  static bool isNumber(const char *s) {
+    for (; *s; s++) {
+      if (!isdigit((unsigned char)*s)) return false;
+    }
+    return true;
+  }
+
+  SDL_Camera *camera_ = nullptr;
+  bool initialized_ = false;
+};
+
+#endif  // TINY_CAMERA_USE_SDL3
+
 class DesktopCamera {
  public:
   bool begin(const camera_config_t &config) {
@@ -430,20 +591,32 @@ class DesktopCamera {
     }
     setOutputSize(w, h);
 
-    useV4l2_ = false;
-    if (config.source != CAMERA_SOURCE_TEST_PATTERN) {
-#if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
-      const char *device = config.device;
-      if (device == nullptr) device = getenv("TINY_CAMERA_DEVICE");
-      if (device == nullptr) device = "/dev/video0";
-      useV4l2_ = v4l2_.open(device, w, h);
-#endif
-      if (!useV4l2_ && config.source == CAMERA_SOURCE_V4L2) {
-        TinyCameraLogger.error("no V4L2 webcam available");
-        return false;
-      }
+    active_ = CAMERA_SOURCE_TEST_PATTERN;
+    const char *device = config.device;
+    if (device == nullptr) device = getenv("TINY_CAMERA_DEVICE");
+#if defined(TINY_CAMERA_USE_SDL3)
+    if ((config.source == CAMERA_SOURCE_AUTO ||
+         config.source == CAMERA_SOURCE_SDL) &&
+        sdl_.open(device, w, h)) {
+      active_ = CAMERA_SOURCE_SDL;
     }
-    if (!useV4l2_) {
+#endif
+#if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
+    if ((config.source == CAMERA_SOURCE_V4L2 ||
+         (config.source == CAMERA_SOURCE_AUTO &&
+          active_ == CAMERA_SOURCE_TEST_PATTERN)) &&
+        v4l2_.open(device ? device : "/dev/video0", w, h)) {
+      active_ = CAMERA_SOURCE_V4L2;
+    }
+#endif
+    if (config.source != CAMERA_SOURCE_AUTO && config.source != active_) {
+      TinyCameraLogger.error(
+          config.source == CAMERA_SOURCE_SDL
+              ? "no SDL webcam available (is SDL3 enabled in this build?)"
+              : "no V4L2 webcam available");
+      return false;
+    }
+    if (active_ == CAMERA_SOURCE_TEST_PATTERN) {
       TinyCameraLogger.info("using the synthetic test pattern (%dx%d)", w, h);
     }
 
@@ -463,10 +636,13 @@ class DesktopCamera {
   }
 
   void end() {
+#if defined(TINY_CAMERA_USE_SDL3)
+    sdl_.close();
+#endif
 #if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
     v4l2_.close();
 #endif
-    useV4l2_ = false;
+    active_ = CAMERA_SOURCE_TEST_PATTERN;
     fbOut_ = false;
     rgb_.clear();
     rgb_.shrink_to_fit();
@@ -482,13 +658,21 @@ class DesktopCamera {
       return nullptr;
     }
 
-    if (useV4l2_) {
-#if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
-      if (!v4l2_.read(rgb_.data(), width_, height_)) return nullptr;
+    switch (active_) {
+#if defined(TINY_CAMERA_USE_SDL3)
+      case CAMERA_SOURCE_SDL:
+        if (!sdl_.read(rgb_.data(), width_, height_)) return nullptr;
+        break;
 #endif
-    } else {
-      throttle();
-      drawTestPattern();
+#if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
+      case CAMERA_SOURCE_V4L2:
+        if (!v4l2_.read(rgb_.data(), width_, height_)) return nullptr;
+        break;
+#endif
+      default:
+        throttle();
+        drawTestPattern();
+        break;
     }
     applyFlip();
     if (!encode()) return nullptr;
@@ -497,7 +681,11 @@ class DesktopCamera {
     fb_.width = width_;
     fb_.height = height_;
     fb_.format = sensor_.pixformat;
-    gettimeofday(&fb_.timestamp, nullptr);
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    auto us = std::chrono::duration_cast<std::chrono::microseconds>(now);
+    fb_.timestamp.tv_sec = (decltype(fb_.timestamp.tv_sec))(us.count() / 1000000);
+    fb_.timestamp.tv_usec =
+        (decltype(fb_.timestamp.tv_usec))(us.count() % 1000000);
     frameCount_++;
     fbOut_ = true;
     return &fb_;
@@ -737,7 +925,10 @@ class DesktopCamera {
   uint32_t frameCount_ = 0;
   std::chrono::steady_clock::time_point lastFrameTime_;
   bool fbOut_ = false;
-  bool useV4l2_ = false;
+  camera_source_t active_ = CAMERA_SOURCE_TEST_PATTERN;
+#if defined(TINY_CAMERA_USE_SDL3)
+  SdlSource sdl_;
+#endif
 #if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)
   V4l2Source v4l2_;
 #endif

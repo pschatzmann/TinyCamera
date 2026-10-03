@@ -17,11 +17,12 @@
 #include "TinyCameraRP2040.h"
 #elif defined(ARDUINO_ARCH_STM32)
 #include "TinyCameraSTM32.h"
-#elif defined(HOST) || defined(__linux__) || defined(__APPLE__)
+#elif defined(HOST) || defined(__linux__) || defined(__APPLE__) || \
+    defined(_WIN32)
 #include "TinyCameraDesktop.h"
 #else
 #error \
-    "TinyCamera: unsupported platform - only ESP32, RP2040 (arduino-pico Camera library), STM32 (DCMI + OV7725, experimental) and desktop (Arduino Emulator) are supported"
+    "TinyCamera: unsupported platform - only ESP32, RP2040 (arduino-pico Camera library), STM32 (DCMI + OV7725, experimental) and desktop (Linux/macOS/Windows) are supported"
 #endif
 
 #include "TinyCameraLogger.h"

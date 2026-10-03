@@ -57,7 +57,7 @@ unmodified on any of them.
   before using it, especially its notes on camera-connector pin
   compatibility between boards.
 
-- **Desktop (Linux/macOS)**: runs the library in a plain C++ program, and
+- **Desktop (Linux/macOS/Windows)**: runs the library in a plain C++ program, and
   the example sketches via the [Arduino Emulator](https://github.com/pschatzmann/Arduino-Emulator),
   built with CMake - see [Desktop / CMake](docs/Desktop.md).
 
@@ -69,7 +69,7 @@ frames, format conversion and sensor tuning
 for measured capture throughput and how to benchmark your own hardware
 - [Supported Boards](docs/SupportedBoards.md) for every pin preset and the
 exact pins it assigns. 
-- [Desktop / CMake](docs/Desktop.md) for running TinyCamera on Linux/macOS
+- [Desktop / CMake](docs/Desktop.md) for running TinyCamera on Linux/macOS/Windows
 (webcam or test pattern) and building it with CMake
 - Runnable sketches are in [examples/](examples/).
 
