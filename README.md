@@ -57,8 +57,8 @@ unmodified on any of them.
   before using it, especially its notes on camera-connector pin
   compatibility between boards.
 
-- **Desktop (Linux/macOS)**: runs the library and its examples on your
-  computer via the [Arduino Emulator](https://github.com/pschatzmann/Arduino-Emulator),
+- **Desktop (Linux/macOS)**: runs the library in a plain C++ program, and
+  the example sketches via the [Arduino Emulator](https://github.com/pschatzmann/Arduino-Emulator),
   built with CMake - see [Desktop / CMake](docs/Desktop.md).
 
 ## Documentation

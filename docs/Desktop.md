@@ -17,6 +17,38 @@ It supports RGB565, RGB888, GRAYSCALE and YUV422 frames, plus JPEG when
 `FRAMESIZE_*` size and at any custom size (`setCustomFrameSize()`). Pin
 settings are accepted and ignored, so the sketches compile unchanged.
 
+## Plain C++ or Arduino sketches
+
+The library itself is plain C++17 and POSIX and needs no Arduino core, so
+you can use it in an ordinary C++ program with its own `main()`:
+
+```cpp
+#include "TinyCamera.h"
+using namespace tiny_camera;
+
+int main() {
+  TinyCameraLogger.begin(TinyCameraLogLevel::Info);  // logs to stderr
+  camera_config_t config = TinyCamera::defaultConfig();
+  config.pixel_format = PIXFORMAT_RGB565;
+  TinyCamera camera;
+  if (!camera.begin(config)) return 1;
+  TinyCameraFrame frame = camera.captureFrame();
+  // use frame.data() / frame.size() / frame.width() / frame.height()
+}
+```
+
+The example sketches are written for Arduino (`setup()`/`loop()`,
+`Serial`), so on the desktop they run with the
+[Arduino Emulator](https://github.com/pschatzmann/Arduino-Emulator). It
+provides the `main()` that calls `setup()` and then `loop()` forever, and a
+`Serial` that writes to the terminal. The CMake build fetches it only when
+the examples are built.
+
+`TinyCameraLogger` writes to an Arduino `Print` (default: `Serial`)
+whenever `Arduino.h` is available, i.e. on every board and with the
+emulator. Without it, `begin()` takes a `FILE &` instead, and the default
+is `stderr`.
+
 ## Webcam capture (V4L2)
 
 V4L2 (Video4Linux2) is the standard Linux kernel interface for video
@@ -55,8 +87,8 @@ Notes:
 
 ## Building with CMake
 
-Build the examples and the tests with CMake (this fetches the Arduino
-Emulator and TinyJPEG from GitHub):
+Build the examples and the tests with CMake (this fetches TinyJPEG, and
+for the examples the Arduino Emulator, from GitHub):
 
 ```
 cmake -B build
@@ -72,10 +104,11 @@ Options (pass as `-D<option>=<value>` to the first `cmake` call):
 | `TINYCAMERA_BUILD_EXAMPLES` | `ON` when TinyCamera is the top-level project, else `OFF` | Build the example sketches for the desktop |
 | `TINYCAMERA_BUILD_TESTS` | `ON` when TinyCamera is the top-level project, else `OFF` | Build the desktop test suite (`test/desktop/`) |
 | `TINYCAMERA_USE_TINYJPEG` | `ON` | Fetch TinyJPEG, enabling `PIXFORMAT_JPEG` and `TinyCameraConvertSoftware.h` |
-| `FETCHCONTENT_SOURCE_DIR_ARDUINO_EMULATOR` | not set | Path to a local Arduino-Emulator checkout to use instead of fetching it |
+| `FETCHCONTENT_SOURCE_DIR_ARDUINO_EMULATOR` | not set | Path to a local Arduino-Emulator checkout to use instead of fetching it (only used for the examples) |
 | `FETCHCONTENT_SOURCE_DIR_TINYJPEG` | not set | Path to a local TinyJPEG checkout to use instead of fetching it |
 
-To use TinyCamera from your own CMake project:
+To use TinyCamera from your own CMake project (this doesn't need the
+Arduino Emulator):
 
 ```cmake
 add_subdirectory(TinyCamera)

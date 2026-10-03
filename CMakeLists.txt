@@ -2,12 +2,13 @@ cmake_minimum_required(VERSION 3.14)
 
 # TinyCamera is header-only (see src/) - the primary distribution mechanism
 # is the Arduino Library Manager (library.properties), not CMake. This file
-# is for the desktop build: running the library and its examples on
-# Linux/macOS via the Arduino Emulator
-# (https://github.com/pschatzmann/Arduino-Emulator), with frames coming
-# from a synthetic test pattern or a V4L2 webcam - see
-# src/TinyCameraDesktop.h. It also lets other CMake projects consume the
-# library via add_subdirectory() + target_link_libraries(... TinyCamera).
+# is for the desktop build: running the library on Linux/macOS, with
+# frames coming from a synthetic test pattern or a V4L2 webcam - see
+# src/TinyCameraDesktop.h and docs/Desktop.md. The library itself is plain
+# C++ and needs no Arduino core; only the example sketches need the Arduino
+# Emulator (https://github.com/pschatzmann/Arduino-Emulator). Other CMake
+# projects can consume the library via add_subdirectory() +
+# target_link_libraries(... TinyCamera).
 project(TinyCamera LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -27,9 +28,9 @@ option(TINYCAMERA_USE_TINYJPEG "Use TinyJPEG for PIXFORMAT_JPEG and TinyCameraCo
 
 include(FetchContent)
 
-# The library headers use the Arduino API (Arduino.h, Print, Serial,
-# millis(), ...), so on the desktop they need the Arduino Emulator.
-if(NOT TARGET arduino_emulator)
+# The example sketches (setup()/loop(), Serial, ...) need the Arduino
+# Emulator; the library and the tests don't.
+if(TINYCAMERA_BUILD_EXAMPLES AND NOT TARGET arduino_emulator)
     FetchContent_Declare(
         arduino_emulator
         GIT_REPOSITORY https://github.com/pschatzmann/Arduino-Emulator.git
@@ -57,7 +58,6 @@ add_library(TinyCamera::TinyCamera ALIAS TinyCamera)
 target_include_directories(TinyCamera INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # C++17: the headers use inline variables (e.g. TinyCameraLogger).
 target_compile_features(TinyCamera INTERFACE cxx_std_17)
-target_link_libraries(TinyCamera INTERFACE arduino_emulator)
 if(TARGET TinyJPEG)
     target_link_libraries(TinyCamera INTERFACE TinyJPEG)
     # TinyJPEG's encoder defaults to images at most 320 pixels wide (its

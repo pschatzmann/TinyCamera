@@ -1,8 +1,10 @@
 #pragma once
 /**
- * Desktop (Linux/macOS) compatibility layer for TinyCamera, for use with
- * the Arduino Emulator (https://github.com/pschatzmann/Arduino-Emulator)
- * and the CMake build in this repository's root CMakeLists.txt.
+ * Desktop (Linux/macOS) compatibility layer for TinyCamera, built via the
+ * CMake build in this repository's root CMakeLists.txt. Plain C++/POSIX:
+ * it needs no Arduino core, so it works in an ordinary C++ program as
+ * well as in Arduino sketches run with the Arduino Emulator
+ * (https://github.com/pschatzmann/Arduino-Emulator).
  *
  * Reproduces the same camera_config_t / camera_fb_t / esp_camera_*
  * surface that ESP32's esp_camera.h, TinyCameraRP2040.h and
@@ -45,13 +47,14 @@
  *    and ignored.
  */
 
-#include <Arduino.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
 #include <time.h>
 
+#include <chrono>
+#include <thread>
 #include <vector>
 
 #if defined(__linux__)
@@ -403,7 +406,6 @@ class DesktopCamera {
   bool begin(const camera_config_t &config) {
     config_ = config;
     frameCount_ = 0;
-    lastFrameMs_ = 0;
     fbOut_ = false;
 
     if (config.frame_size < 0 || config.frame_size >= FRAMESIZE_INVALID) {
@@ -533,12 +535,12 @@ class DesktopCamera {
 
   void throttle() {
     if (config_.test_pattern_fps <= 0) return;
-    uint32_t interval = 1000 / config_.test_pattern_fps;
-    uint32_t now = millis();
-    if (frameCount_ > 0 && now - lastFrameMs_ < interval) {
-      delay(interval - (now - lastFrameMs_));
+    const auto interval =
+        std::chrono::microseconds(1000000 / config_.test_pattern_fps);
+    if (frameCount_ > 0) {
+      std::this_thread::sleep_until(lastFrameTime_ + interval);
     }
-    lastFrameMs_ = millis();
+    lastFrameTime_ = std::chrono::steady_clock::now();
   }
 
   /// Color bars over the top 2/3, a gray ramp below, and a white square
@@ -733,7 +735,7 @@ class DesktopCamera {
   int width_ = 0;
   int height_ = 0;
   uint32_t frameCount_ = 0;
-  uint32_t lastFrameMs_ = 0;
+  std::chrono::steady_clock::time_point lastFrameTime_;
   bool fbOut_ = false;
   bool useV4l2_ = false;
 #if defined(TINY_CAMERA_DESKTOP_HAS_V4L2)

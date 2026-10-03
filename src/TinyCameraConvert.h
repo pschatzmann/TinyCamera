@@ -15,6 +15,7 @@
  * TinyCameraConvertSoftware.h instead (backed by the TinyJPEG library).
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "TinyCamera.h"
