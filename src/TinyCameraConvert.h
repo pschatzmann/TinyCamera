@@ -8,7 +8,8 @@
  * On RP2040 and STM32 there is no img_converters.h equivalent - PicoCamera
  * (arduino-pico's bundled camera library; see TinyCameraRP2040.h) has no
  * hardware/vendor JPEG codec, same as STM32's DCMI backend - so this
- * header provides software implementations instead, with a narrower
+ * header provides software implementations instead (also used by the
+ * desktop backend, TinyCameraDesktop.h), with a narrower
  * feature set (see the function comments below for exact coverage). For
  * full JPEG encode/decode on either platform, see
  * TinyCameraConvertSoftware.h instead (backed by the TinyJPEG library).
@@ -117,8 +118,9 @@ inline bool scaleRgb565(const TinyCameraFrame &frame, uint8_t *outBuf,
   return true;
 }
 
-#if defined(ARDUINO_ARCH_STM32) || defined(ARDUINO_ARCH_RP2040) || \
-    defined(PICO_RP2040) || defined(TARGET_RP2040)
+// Every platform except ESP32 (STM32, RP2040, desktop): software
+// implementations.
+#if !defined(ESP32)
 
 /// Converts a captured frame to a JPEG buffer. Neither STM32 nor RP2040
 /// (PicoCamera) has a hardware/vendor JPEG encoder here, so this only
@@ -307,6 +309,6 @@ inline bool toRgb565(const TinyCameraFrame &frame, uint8_t *outBuf) {
   return ok;
 }
 
-#endif  // ARDUINO_ARCH_STM32 || RP2040
+#endif  // !ESP32
 
 }  // namespace tiny_camera

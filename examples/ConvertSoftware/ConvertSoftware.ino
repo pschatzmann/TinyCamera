@@ -49,8 +49,11 @@ void loop() {
   if (frame) {
     TinyCameraBuffer jpg = toJpgSoftware(frame, 80);  // quality 1-100
     if (jpg) {
-      Serial.printf("Software-encoded to JPEG: %u bytes (from %u bytes RGB565)\n",
-                    (unsigned)jpg.size(), (unsigned)frame.size());
+      char msg[80];
+      snprintf(msg, sizeof(msg),
+               "Software-encoded to JPEG: %u bytes (from %u bytes RGB565)",
+               (unsigned)jpg.size(), (unsigned)frame.size());
+      Serial.println(msg);
       // e.g. write jpg.data()/jpg.size() to a file or stream it
     } else {
       Serial.println("Software JPEG encoding failed");

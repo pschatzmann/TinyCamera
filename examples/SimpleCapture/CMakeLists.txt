@@ -1,0 +1,1 @@
+arduino_sketch(SimpleCapture SimpleCapture.ino LIBRARIES TinyCamera)

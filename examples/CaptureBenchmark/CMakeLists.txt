@@ -1,0 +1,1 @@
+arduino_sketch(CaptureBenchmark CaptureBenchmark.ino LIBRARIES TinyCamera)

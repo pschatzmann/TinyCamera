@@ -1,0 +1,1 @@
+arduino_sketch(DesktopCapture DesktopCapture.ino LIBRARIES TinyCamera)

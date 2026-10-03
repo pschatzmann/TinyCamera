@@ -51,11 +51,11 @@ inline bool toJEFormat(PixelFormat in, JEPixelFormat &out) {
     case PIXFORMAT_RGB565:
       out = JE_FMT_RGB565;
       return true;
-// PIXFORMAT_RGB888 only exists in esp32-camera's pixformat_t - neither
-// STM32's own (TinyCameraSTM32.h) nor RP2040/PicoCamera's (see
-// TinyCameraRP2040.h) defines it, since neither backend ever produces
-// RGB888 frames.
-#if defined(ESP32)
+// PIXFORMAT_RGB888 only exists in esp32-camera's and the desktop
+// backend's (TinyCameraDesktop.h) pixformat_t - neither STM32's own
+// (TinyCameraSTM32.h) nor RP2040/PicoCamera's (see TinyCameraRP2040.h)
+// defines it, since neither backend ever produces RGB888 frames.
+#if defined(ESP32) || defined(TINY_CAMERA_DESKTOP)
     case PIXFORMAT_RGB888:
       out = JE_FMT_RGB888;
       return true;

@@ -1,10 +1,12 @@
 #pragma once
 /**
  * TinyCamera - a tiny, header-only C++ wrapper around the ESP32 (esp32-camera),
- * RP2040 and STM32 (DCMI + OV7725, experimental) camera APIs.
+ * RP2040 and STM32 (DCMI + OV7725, experimental) camera APIs, plus a
+ * desktop backend (test pattern / V4L2 webcam) for the Arduino Emulator.
  *
- * All three platforms expose (or are given - RP2040 via
- * TinyCameraRP2040.h, STM32 via TinyCameraSTM32.h) a compatible C API
+ * All platforms expose (or are given - RP2040 via TinyCameraRP2040.h,
+ * STM32 via TinyCameraSTM32.h, desktop via TinyCameraDesktop.h) a
+ * compatible C API
  * (camera_config_t, camera_fb_t, esp_camera_init/deinit/fb_get/fb_return),
  * so this single header works unmodified on any of them.
  */
@@ -15,9 +17,11 @@
 #include "TinyCameraRP2040.h"
 #elif defined(ARDUINO_ARCH_STM32)
 #include "TinyCameraSTM32.h"
+#elif defined(HOST) || defined(__linux__) || defined(__APPLE__)
+#include "TinyCameraDesktop.h"
 #else
 #error \
-    "TinyCamera: unsupported platform - only ESP32, RP2040 (arduino-pico Camera library) and STM32 (DCMI + OV7725, experimental) are supported"
+    "TinyCamera: unsupported platform - only ESP32, RP2040 (arduino-pico Camera library), STM32 (DCMI + OV7725, experimental) and desktop (Arduino Emulator) are supported"
 #endif
 
 #include "TinyCameraLogger.h"
@@ -240,6 +244,8 @@ class TinyCamera {
     return true;
 #elif defined(ARDUINO_ARCH_STM32)
     return tinyCameraStm32SetCustomFrameSize(width, height);
+#elif defined(TINY_CAMERA_DESKTOP)
+    return tinyCameraDesktopSetCustomFrameSize(width, height);
 #else
     (void)width;
     (void)height;

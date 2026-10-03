@@ -32,9 +32,11 @@ void setup() {
 void loop() {
   TinyCameraFrame frame = camera.captureFrame();
   if (frame) {
-    Serial.printf("Captured frame: %u bytes (%ux%u)\n",
-                  (unsigned)frame.size(), (unsigned)frame.width(),
-                  (unsigned)frame.height());
+    char msg[80];
+    snprintf(msg, sizeof(msg), "Captured frame: %u bytes (%ux%u)",
+             (unsigned)frame.size(), (unsigned)frame.width(),
+             (unsigned)frame.height());
+    Serial.println(msg);
   } else {
     Serial.println("Capture failed");
   }

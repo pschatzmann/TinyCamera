@@ -1,0 +1,1 @@
+arduino_sketch(ConvertSoftware ConvertSoftware.ino LIBRARIES TinyCamera)

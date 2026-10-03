@@ -70,14 +70,17 @@ void loop() {
     return;
   }
 
+  char msg[80];
   if (hardwareScaled) {
     // Frame is already kOutWidth x kOutHeight - use frame.data() directly.
-    Serial.printf("Frame: %ux%u (hardware-scaled)\n", (unsigned)frame.width(),
-                  (unsigned)frame.height());
+    snprintf(msg, sizeof(msg), "Frame: %ux%u (hardware-scaled)",
+             (unsigned)frame.width(), (unsigned)frame.height());
+    Serial.println(msg);
   } else if (scaleRgb565(frame, outBuffer, kOutWidth, kOutHeight)) {
-    Serial.printf("Frame: %ux%u -> %zux%zu (software-scaled)\n",
-                  (unsigned)frame.width(), (unsigned)frame.height(),
-                  kOutWidth, kOutHeight);
+    snprintf(msg, sizeof(msg), "Frame: %ux%u -> %ux%u (software-scaled)",
+             (unsigned)frame.width(), (unsigned)frame.height(),
+             (unsigned)kOutWidth, (unsigned)kOutHeight);
+    Serial.println(msg);
   } else {
     Serial.println("Software scaling failed");
   }

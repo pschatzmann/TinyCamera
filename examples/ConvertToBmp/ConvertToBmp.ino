@@ -1,4 +1,5 @@
-// Captures a JPEG frame and converts it to BMP using TinyCameraConvert.h.
+// Captures a frame (JPEG on ESP32, RGB565 elsewhere) and converts it to BMP
+// using TinyCameraConvert.h.
 // ESP32: tested with an AI-Thinker ESP32-CAM module.
 // RP2040: assign config.pin_* for your board before calling camera.begin().
 
@@ -21,6 +22,9 @@ void setup() {
 #else
   // RP2040: fill in your board's pins, e.g.
   // config.pin_xclk = ...; config.pin_d0 = ...; etc.
+  // Off ESP32, toBmp() has no JPEG decoder - capture raw RGB565 instead
+  // (or see TinyCameraConvertSoftware.h's toBmpSoftware()).
+  config.pixel_format = PIXFORMAT_RGB565;
 #endif
 
   if (!camera.begin(config)) {
@@ -35,7 +39,9 @@ void loop() {
   if (frame) {
     TinyCameraBuffer bmp = toBmp(frame);
     if (bmp) {
-      Serial.printf("Converted to BMP: %u bytes\n", (unsigned)bmp.size());
+      Serial.print("Converted to BMP: ");
+      Serial.print((unsigned)bmp.size());
+      Serial.println(" bytes");
       // e.g. write bmp.data()/bmp.size() to a file or stream it
     } else {
       Serial.println("BMP conversion failed");
