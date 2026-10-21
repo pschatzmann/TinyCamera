@@ -14,7 +14,8 @@ capturing frames, converting them to other formats and tuning the sensor.
 - [8. Managing the camera lifecycle](#8-managing-the-camera-lifecycle)
 - [9. Logging](#9-logging)
 - [10. STM32 (DCMI)](#10-stm32-dcmi)
-- [11. Troubleshooting](#11-troubleshooting)
+- [11. ESP_Video (ESP32-P4 MIPI-CSI, ESP32-S3 DVP)](#11-esp_video-esp32-p4-mipi-csi-esp32-s3-dvp)
+- [12. Troubleshooting](#12-troubleshooting)
 
 ## 1. Installation
 
@@ -724,7 +725,56 @@ sections.
 > never be wired up without first verifying its connector's actual pin
 > assignments against real documentation.
 
-## 11. Troubleshooting
+## 11. ESP_Video (ESP32-P4 MIPI-CSI, ESP32-S3 DVP)
+
+The ESP32-P4 has no `esp32-camera` driver: its camera interface is
+MIPI-CSI, served by Espressif's `esp_video` stack, which the ESP32 Arduino
+core (3.3+) ships together with the `ESP_Video` library.
+`TinyCameraESPVideo.h` bridges it to the usual `esp_camera_*` API, so
+`TinyCamera`, `TinyCameraConvert.h` and `TinyCameraConvertSoftware.h` work
+unchanged. MIPI-CSI is **verified on real hardware** (Waveshare
+ESP32-P4-WIFI6 with its OV5647 module); DVP is only compiled so far.
+
+| Chip | Interfaces | Backend selection |
+|---|---|---|
+| ESP32-P4 | MIPI-CSI, DVP | automatic (no `esp_camera.h`) |
+| ESP32-S3 | DVP (the S3 has no MIPI-CSI) | opt-in: `#define TINY_CAMERA_USE_ESP_VIDEO` before `#include "TinyCamera.h"` |
+
+The interface follows from the pins: DVP when `pin_d0`... are set (the
+regular ESP32-S3 presets work), else MIPI-CSI, which only needs the SCCB
+(I2C) pins - its data lanes are fixed:
+
+```cpp
+camera_config_t config = TinyCamera::defaultConfig();
+setPinsWaveshareEsp32P4Wifi6(config);  // SCCB on GPIO7/GPIO8
+config.pixel_format = PIXFORMAT_JPEG;  // hardware JPEG encoder on the P4
+config.frame_size = FRAMESIZE_VGA;
+```
+
+Things that differ from `esp32-camera`:
+
+- Each sensor runs at one fixed resolution set by the core's sdkconfig
+  (OV5647: 800x800, SC2336: 1280x720, OV2640 over DVP: 640x480). Frames
+  are center-cropped to the requested aspect ratio and scaled (nearest
+  neighbor) to `frame_size` / `custom_width` x `custom_height` in software.
+  `config.native_frame_size = true` skips that and hands out the driver's
+  own buffer without a copy.
+- `PIXFORMAT_JPEG` uses the P4's hardware JPEG encoder; on chips without
+  one (S3) the sensor's own JPEG output, at its native size.
+- RGB565 is native-endian. DVP sensors that only deliver YUYV are
+  converted to RGB565 in software.
+- `fb_count` is the number of V4L2 buffers (at least 2); only one frame
+  can be held at a time.
+- The SCCB bus can be shared with other I2C devices (e.g. the ES8311 codec
+  on the Waveshare board) by passing its handle in `config.sccb_i2c_bus`.
+- On the Waveshare ESP32-P4-WIFI6, build with
+  `esp32:esp32:esp32p4:ChipVariant=postv3` - the default "Before v3.00"
+  chip variant boot-loops on that board.
+
+See the [WaveshareESP32P4Capture](../examples/WaveshareESP32P4Capture) and
+[ESPVideoCapture](../examples/ESPVideoCapture) examples.
+
+## 12. Troubleshooting
 
 **`begin()` returns false.** Almost always pins or memory. Verify you called
 the right `setPinsXxx()` for your board, then try a smaller `frame_size` or

@@ -53,6 +53,17 @@ ESP32/S2/S3 preset is sourced from the ESP32 Arduino core's own bundled
 `CameraWebServer` example (Espressif's reference pin list) but has not been
 individually re-verified by this library's own testing.
 
+## ESP32-P4 (ESP_Video, MIPI-CSI)
+
+MIPI-CSI data lanes are fixed pins, so these presets only set the SCCB
+(I2C) bus - see [Tutorial.md](Tutorial.md#11-esp_video-esp32-p4-mipi-csi-esp32-s3-dvp).
+Verified on real hardware with the
+[WaveshareESP32P4Capture](../examples/WaveshareESP32P4Capture) example.
+
+| Board | Function | I2C port | SDA | SCL | PWDN | RESET |
+|---|---|---|---|---|---|---|
+| Waveshare ESP32-P4-WIFI6 (OV5647) | `setPinsWaveshareEsp32P4Wifi6` | 0 | 7 | 8 | -1 | -1 |
+
 ## STM32
 
 | Board | Function | XCLK | SDA | SCL | PWDN | RESET | D0 | D1 | D2 | D3 | D4 | D5 | D6 | D7 | VSYNC | HREF | PCLK |

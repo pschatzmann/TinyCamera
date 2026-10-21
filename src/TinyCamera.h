@@ -2,16 +2,25 @@
 /**
  * TinyCamera - a tiny, header-only C++ wrapper around the ESP32 (esp32-camera),
  * RP2040 and STM32 (DCMI + OV7725, experimental) camera APIs, plus a
- * desktop backend (test pattern / V4L2 webcam) for the Arduino Emulator.
+ * desktop backend (test pattern / V4L2 webcam) for the Arduino Emulator,
+ * and an ESP_Video backend (MIPI-CSI/DVP, e.g. ESP32-P4/ESP32-S3).
  *
  * All platforms expose (or are given - RP2040 via TinyCameraRP2040.h,
- * STM32 via TinyCameraSTM32.h, desktop via TinyCameraDesktop.h) a
+ * STM32 via TinyCameraSTM32.h, desktop via TinyCameraDesktop.h,
+ * ESP_Video via TinyCameraESPVideo.h) a
  * compatible C API
  * (camera_config_t, camera_fb_t, esp_camera_init/deinit/fb_get/fb_return),
  * so this single header works unmodified on any of them.
  */
 
-#if defined(ESP32)
+// ESP32 variants without esp32-camera (e.g. the ESP32-P4 with its MIPI-CSI
+// camera interface) use the ESP_Video backend; on the others (e.g. the
+// ESP32-S3, for DVP) it is opt-in by defining TINY_CAMERA_USE_ESP_VIDEO
+// before including this header.
+#if defined(ESP32) && \
+    (defined(TINY_CAMERA_USE_ESP_VIDEO) || !__has_include("esp_camera.h"))
+#include "TinyCameraESPVideo.h"
+#elif defined(ESP32)
 #include "esp_camera.h"
 #elif defined(ARDUINO_ARCH_RP2040) || defined(PICO_RP2040) || defined(TARGET_RP2040)
 #include "TinyCameraRP2040.h"
@@ -202,7 +211,11 @@ class TinyCamera {
   ///    sensor's native pixel array size, so it needs no per-sensor-model
   ///    geometry table - only ever scales down from whatever begin() was
   ///    last configured with, never up past it.
-  ///  - RP2040: not supported - arduino-pico's Camera library exposes no
+  ///  - ESP_Video backend (ESP32-P4, opt-in on ESP32-S3): the sensor runs
+///    at a fixed resolution, so the frames are center-cropped and scaled
+///    in software instead (see TinyCameraESPVideo.h) - accepts any size
+///    up to 4096x4096.
+///  - RP2040: not supported - arduino-pico's Camera library exposes no
   ///    equivalent raw-window/scale hook, only the fixed FRAMESIZE_*
   ///    list via set_framesize(). Always returns false.
   ///  - STM32: works for OV7725 (the only sensor this backend currently
@@ -223,7 +236,9 @@ class TinyCamera {
           "setCustomFrameSize() called while camera is not active");
       return false;
     }
-#if defined(ESP32)
+#if defined(TINY_CAMERA_ESP_VIDEO)
+    return tinyCameraEspVideoSetCustomFrameSize(width, height);
+#elif defined(ESP32)
     sensor_t *s = esp_camera_sensor_get();
     if (s == nullptr || s->set_res_raw == nullptr) {
       TinyCameraLogger.error(

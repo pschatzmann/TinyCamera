@@ -1,7 +1,8 @@
 #pragma once
 /**
  * Pin presets for common ESP32/ESP32-S2/ESP32-S3 camera boards, plus the
- * WeAct STM32H750's onboard DCMI camera connector. These fill a
+ * Waveshare ESP32-P4-WIFI6's MIPI-CSI connector and the WeAct
+ * STM32H750's onboard DCMI camera connector. These fill a
  * camera_config_t (defined by esp_camera.h, the RP2040-compatible
  * Camera.h, or TinyCameraSTM32.h) with the pin assignments of a specific
  * board. RP2040 boards and most STM32 boards have no de-facto-standard
@@ -385,6 +386,24 @@ inline void setPinsEsp32S3MicCam(camera_config_t &config) {
   config.pin_href = 12;
   config.pin_pclk = 7;
 }
+
+#if defined(TINY_CAMERA_ESP_VIDEO)
+/**
+ * Waveshare ESP32-P4-WIFI6: MIPI-CSI 2-lane camera connector (Waveshare
+ * ships it with an OV5647 module). The data lanes are fixed MIPI-CSI
+ * pins, so only the SCCB bus is set: it is the board's shared I2C bus
+ * (SDA=GPIO7, SCL=GPIO8, also used by the ES8311 audio codec) - from
+ * Waveshare's esp32_p4_platform BSP. If your sketch already uses that
+ * bus, pass its handle in camera_config_t::sccb_i2c_bus instead.
+ */
+inline void setPinsWaveshareEsp32P4Wifi6(camera_config_t &config) {
+  config.pin_pwdn = -1;
+  config.pin_reset = -1;
+  config.sccb_i2c_port = 0;
+  config.pin_sccb_sda = 7;
+  config.pin_sccb_scl = 8;
+}
+#endif  // TINY_CAMERA_ESP_VIDEO
 
 #if defined(ARDUINO_ARCH_STM32)
 /**

@@ -20,7 +20,7 @@
 
 #include "TinyCamera.h"
 
-#if defined(ESP32)
+#if defined(ESP32) && !defined(TINY_CAMERA_ESP_VIDEO)
 #include "img_converters.h"
 #endif
 
@@ -119,9 +119,10 @@ inline bool scaleRgb565(const TinyCameraFrame &frame, uint8_t *outBuf,
   return true;
 }
 
-// Every platform except ESP32 (STM32, RP2040, desktop): software
+// Every platform except ESP32 with esp32-camera (STM32, RP2040, desktop,
+// the ESP_Video backend - no img_converters.h there): software
 // implementations.
-#if !defined(ESP32)
+#if !defined(ESP32) || defined(TINY_CAMERA_ESP_VIDEO)
 
 /// Converts a captured frame to a JPEG buffer. Neither STM32 nor RP2040
 /// (PicoCamera) has a hardware/vendor JPEG encoder here, so this only
