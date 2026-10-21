@@ -67,6 +67,7 @@
 
 #include "driver/ledc.h"  // LEDC_CHANNEL_0/LEDC_TIMER_0 for defaultConfig()
 #include "esp_heap_caps.h"
+#include "esp_log.h"
 #include "sdkconfig.h"
 #if CONFIG_SOC_JPEG_ENCODE_SUPPORTED
 #include "driver/jpeg_encode.h"
@@ -354,6 +355,29 @@ class EspVideoCamera {
   }
 
  private:
+  /// esp_video detects the sensor by trying every sensor driver the core
+  /// enables, one after the other - and each one that isn't connected logs
+  /// a series of ESP-IDF errors (failed SCCB transfers, wrong chip ID).
+  /// This silences ESP-IDF logging for the duration of the probe and
+  /// restores it afterwards; openDevice() reports the outcome itself. At
+  /// TinyCameraLogLevel::Debug the probe messages are left visible.
+  class SensorProbeLogGuard {
+   public:
+    SensorProbeLogGuard() {
+      if (TinyCameraLogger.level() >= TinyCameraLogLevel::Debug) return;
+      active_ = true;
+      prev_ = esp_log_level_get("*");
+      esp_log_level_set("*", ESP_LOG_NONE);
+    }
+    ~SensorProbeLogGuard() {
+      if (active_) esp_log_level_set("*", prev_);
+    }
+
+   private:
+    bool active_ = false;
+    esp_log_level_t prev_ = ESP_LOG_ERROR;
+  };
+
   /// Starts the MIPI-CSI or DVP video device, picked from config.
   bool openDevice(const camera_config_t &config) {
     ESPVideoCamConfigClass cam;
@@ -376,10 +400,15 @@ class EspVideoCamera {
                  config.pin_d7);
       ESPVideoDVPConfigClass dvp;
       dvp.begin(cam, pins, config.xclk_freq_hz);
-      if (!video_.begin(dvp)) {
+      bool ok;
+      {
+        SensorProbeLogGuard guard;
+        ok = video_.begin(dvp);
+      }
+      if (!ok) {
         TinyCameraLogger.error(
             "DVP init failed - is a supported sensor connected and are the "
-            "pins right?");
+            "pins right? (TinyCameraLogLevel::Debug shows the sensor probe)");
         return false;
       }
       device = ESP_VIDEO_DVP_DEVICE_NAME;
@@ -391,10 +420,16 @@ class EspVideoCamera {
 #if CONFIG_ESP_VIDEO_ENABLE_MIPI_CSI_VIDEO_DEVICE
       ESPVideoCSIConfigClass csi;
       csi.begin(cam);
-      if (!video_.begin(csi)) {
+      bool ok;
+      {
+        SensorProbeLogGuard guard;
+        ok = video_.begin(csi);
+      }
+      if (!ok) {
         TinyCameraLogger.error(
             "MIPI-CSI init failed - is a supported sensor connected and are "
-            "the SCCB pins right?");
+            "the SCCB pins right? (TinyCameraLogLevel::Debug shows the sensor "
+            "probe)");
         return false;
       }
       device = ESP_VIDEO_MIPI_CSI_DEVICE_NAME;
